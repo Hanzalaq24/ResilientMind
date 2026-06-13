@@ -21,92 +21,18 @@ import { db } from './lib/db';
 import type { User as UserType, JournalEntry, AIInsight } from './lib/db';
 import { analyzeJournal, getCompanionChatResponse } from './lib/gemini';
 import type { ChatMessage, AIInsightOutput } from './lib/gemini';
+import StressTrendChart from './components/StressTrendChart';
 
-// Visual SVG Trend Chart Component
-function StressTrendChart({ history }: { history: { entry: JournalEntry; insight: AIInsight | null }[] }) {
-  const chartHeight = 120;
-  const chartWidth = 500;
-  const padding = 20;
-
-  // Last 7 entries in chronological order
-  const data = [...history]
-    .slice(0, 7)
-    .reverse();
-
-  if (data.length < 2) {
-    return (
-      <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-        Log at least 2 check-ins to visualize stress & sleep trends.
-      </div>
-    );
-  }
-
-  const getX = (index: number) => {
-    return padding + (index * (chartWidth - padding * 2)) / (data.length - 1);
-  };
-
-  const getMoodY = (score: number) => {
-    return chartHeight - padding - ((score - 1) * (chartHeight - padding * 2)) / 9;
-  };
-
-  const getSleepY = (hours: number) => {
-    const clamped = Math.max(2, Math.min(12, hours));
-    return chartHeight - padding - ((clamped - 2) * (chartHeight - padding * 2)) / 10;
-  };
-
-  // Build paths
-  let moodPath = '';
-  let sleepPath = '';
-
-  data.forEach((d, i) => {
-    const x = getX(i);
-    const yMood = getMoodY(d.entry.moodScore);
-    const ySleep = getSleepY(d.entry.sleepHours);
-
-    if (i === 0) {
-      moodPath = `M ${x} ${yMood}`;
-      sleepPath = `M ${x} ${ySleep}`;
-    } else {
-      moodPath += ` L ${x} ${yMood}`;
-      sleepPath += ` L ${x} ${ySleep}`;
-    }
-  });
-
-  return (
-    <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.015)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.04)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-cyan)' }}></span>
-          Mood Level (1-10)
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#a855f7' }}></span>
-          Sleep Hours (2-12h)
-        </span>
-      </div>
-      <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
-          {/* Grid lines */}
-          <line x1={padding} y1={padding} x2={chartWidth - padding} y2={padding} stroke="rgba(255, 255, 255, 0.03)" strokeDasharray="3" />
-          <line x1={padding} y1={chartHeight / 2} x2={chartWidth - padding} y2={chartHeight / 2} stroke="rgba(255, 255, 255, 0.03)" strokeDasharray="3" />
-          <line x1={padding} y1={chartHeight - padding} x2={chartWidth - padding} y2={chartHeight - padding} stroke="rgba(255, 255, 255, 0.06)" />
-
-          {/* Paths */}
-          <path d={moodPath} fill="none" stroke="var(--accent-cyan)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 0px 4px rgba(0, 242, 254, 0.4))' }} />
-          <path d={sleepPath} fill="none" stroke="#a855f7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 0px 4px rgba(168, 85, 247, 0.4))' }} />
-
-          {/* Data Points */}
-          {data.map((d, i) => (
-            <g key={i}>
-              <circle cx={getX(i)} cy={getMoodY(d.entry.moodScore)} r="4" fill="var(--accent-cyan)" />
-              <circle cx={getX(i)} cy={getSleepY(d.entry.sleepHours)} r="4" fill="#a855f7" />
-            </g>
-          ))}
-        </svg>
-      </div>
-    </div>
-  );
-}
+// Security: HTML/XSS input sanitizer — strips dangerous characters
+const sanitizeInput = (input: string): string => {
+  return input
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;')
+    .trim();
+};
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
@@ -180,8 +106,10 @@ export default function App() {
       alert('Please enter a Gemini API Key to enable AI features.');
       return;
     }
+    // Security: sanitize name input before saving
+    const safeName = sanitizeInput(nameInput);
     db.saveApiKey(apiKeyInput.trim());
-    const user = db.createUser(nameInput.trim(), examTypeInput);
+    const user = db.createUser(safeName, examTypeInput);
     setCurrentUser(user);
     loadHistory(user.id);
   };
@@ -212,13 +140,16 @@ export default function App() {
     setLoadingText("Gemini is analyzing emotional markers...");
     
     try {
+      // Security: sanitize journal entry before saving
+      const safeJournalText = sanitizeInput(journalText);
+
       // 1. Create database record for entry
       const entry = db.createJournalEntry(
         currentUser.id,
         mood,
         sleep,
         study,
-        journalText.trim()
+        safeJournalText
       );
       
       // 2. Fetch past entries to provide trend analysis
@@ -309,7 +240,8 @@ export default function App() {
     e.preventDefault();
     if (!userInputMessage.trim() || !currentUser) return;
 
-    const userMsg = userInputMessage.trim();
+    // Security: sanitize chat message before use
+    const userMsg = sanitizeInput(userInputMessage);
     const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
     
     setChatMessages(updatedMessages);
@@ -411,9 +343,10 @@ export default function App() {
                 <button 
                   className="logout-btn" 
                   onClick={fillDemoScenario}
+                  aria-label="Auto-fill demo profile and API key"
                   style={{ width: '100%', borderColor: 'rgba(0, 242, 254, 0.2)', color: 'var(--accent-cyan)' }}
                 >
-                  ⚡ Auto-Fill Demo Profile & Key
+                  ⚡ Auto-Fill Demo Profile &amp; Key
                 </button>
               </div>
             </div>
@@ -434,8 +367,8 @@ export default function App() {
           </div>
         </header>
         <main>
-          <div className="loading-view">
-            <div className="spinner"></div>
+          <div className="loading-view" role="status" aria-live="polite" aria-label="Loading AI analysis">
+            <div className="spinner" aria-hidden="true"></div>
             <p className="loading-text">{loadingText}</p>
             <p style={{ color: 'var(--text-muted)' }}>Using Gemini AI model to identify stress biomarkers...</p>
           </div>
@@ -456,10 +389,10 @@ export default function App() {
             <User size={14} style={{ marginRight: '4px', verticalAlign: 'middle', color: 'var(--accent-cyan)' }} />
             <span>{currentUser.name} ({currentUser.examType})</span>
           </div>
-          <button className="logout-btn" onClick={() => setShowSettings(true)} style={{ marginRight: '0.5rem' }}>
+          <button className="logout-btn" onClick={() => setShowSettings(true)} aria-label="Open settings" style={{ marginRight: '0.5rem' }}>
             <Settings size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Settings
           </button>
-          <button className="logout-btn" onClick={handleLogout}>
+          <button className="logout-btn" onClick={handleLogout} aria-label="Sign out of your account">
             <LogOut size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Sign Out
           </button>
         </div>
@@ -480,15 +413,16 @@ export default function App() {
           justifyContent: 'center',
           padding: '1rem'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2rem', position: 'relative' }}>
+          <div className="glass-panel" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" style={{ width: '100%', maxWidth: '400px', padding: '2rem', position: 'relative' }}>
             <button 
               onClick={() => setShowSettings(false)}
+              aria-label="Close settings"
               style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}
             >
-              <X size={20} />
+              <X size={20} aria-hidden="true" />
             </button>
-            <h3 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Settings size={20} style={{ color: 'var(--accent-cyan)' }} /> Settings
+            <h3 id="settings-dialog-title" style={{ fontFamily: 'var(--font-title)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Settings size={20} style={{ color: 'var(--accent-cyan)' }} aria-hidden="true" /> Settings
             </h3>
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
               <label className="form-label" htmlFor="api-key-settings">Gemini API Key</label>
@@ -539,7 +473,11 @@ export default function App() {
                     max="10" 
                     className="input-slider" 
                     value={mood} 
-                    onChange={(e) => setMood(Number(e.target.value))} 
+                    onChange={(e) => setMood(Number(e.target.value))}
+                    aria-label={`Mood level: ${mood} out of 10`}
+                    aria-valuemin={1}
+                    aria-valuemax={10}
+                    aria-valuenow={mood}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
                     <span>Stressed</span>
@@ -561,7 +499,11 @@ export default function App() {
                     max="14" 
                     className="input-slider" 
                     value={sleep} 
-                    onChange={(e) => setSleepHours(Number(e.target.value))} 
+                    onChange={(e) => setSleepHours(Number(e.target.value))}
+                    aria-label={`Sleep hours: ${sleep} hours`}
+                    aria-valuemin={2}
+                    aria-valuemax={14}
+                    aria-valuenow={sleep}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
                     <span>Poor</span>
@@ -585,7 +527,11 @@ export default function App() {
                     max="18" 
                     className="input-slider" 
                     value={study} 
-                    onChange={(e) => setStudyHours(Number(e.target.value))} 
+                    onChange={(e) => setStudyHours(Number(e.target.value))}
+                    aria-label={`Study hours today: ${study} hours`}
+                    aria-valuemin={0}
+                    aria-valuemax={18}
+                    aria-valuenow={study}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
                     <span>0h</span>
@@ -608,8 +554,8 @@ export default function App() {
                 />
               </div>
 
-              <button className="action-btn" onClick={handleAnalyze} style={{ marginTop: '0.5rem' }}>
-                <Sparkles size={18} /> Analyze Stress & Predict Burnout
+              <button className="action-btn" onClick={handleAnalyze} aria-label="Analyze stress and predict burnout" style={{ marginTop: '0.5rem' }}>
+                <Sparkles size={18} aria-hidden="true" /> Analyze Stress &amp; Predict Burnout
               </button>
             </div>
 
@@ -672,8 +618,8 @@ export default function App() {
         {view === 'insight' && activeInsight && activeJournalEntry && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <button className="btn-secondary" onClick={() => setView('form')} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <ArrowLeft size={16} /> Dashboard
+              <button className="btn-secondary" onClick={() => setView('form')} aria-label="Go back to dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <ArrowLeft size={16} aria-hidden="true" /> Dashboard
               </button>
               <h3 style={{ fontFamily: 'var(--font-title)', color: 'var(--text-muted)' }}>
                 Analysis for {new Date(activeJournalEntry.createdAt).toLocaleDateString()}
@@ -797,8 +743,8 @@ export default function App() {
         {view === 'chat' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <button className="btn-secondary" onClick={() => setView(activeInsight ? 'insight' : 'form')} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <ArrowLeft size={16} /> Back
+              <button className="btn-secondary" onClick={() => setView(activeInsight ? 'insight' : 'form')} aria-label="Go back" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <ArrowLeft size={16} aria-hidden="true" /> Back
               </button>
               <h3 style={{ fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Brain size={20} style={{ color: 'var(--accent-cyan)' }} /> AI Wellness Companion Chat
@@ -819,7 +765,7 @@ export default function App() {
                 )}
                 <div ref={chatBottomRef} />
               </div>
-              <form onSubmit={sendChatMessage} className="chat-input-row">
+              <form onSubmit={sendChatMessage} className="chat-input-row" aria-label="Chat message form">
                 <input 
                   type="text" 
                   className="chat-input" 
@@ -827,9 +773,10 @@ export default function App() {
                   value={userInputMessage}
                   onChange={(e) => setUserInputMessage(e.target.value)}
                   disabled={isChatTyping}
+                  aria-label="Type your message to the AI companion"
                 />
-                <button type="submit" className="chat-send-btn" disabled={isChatTyping}>
-                  <Send size={18} />
+                <button type="submit" className="chat-send-btn" disabled={isChatTyping} aria-label="Send message">
+                  <Send size={18} aria-hidden="true" />
                 </button>
               </form>
             </div>
