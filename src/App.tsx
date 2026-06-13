@@ -172,7 +172,7 @@ export default function App() {
     e.preventDefault();
     if (!nameInput.trim()) return;
     if (!apiKeyInput.trim()) {
-      alert('Please enter an NVIDIA API Key to enable AI features.');
+      alert('Please enter a Gemini API Key to enable AI features.');
       return;
     }
     db.saveApiKey(apiKeyInput.trim());
@@ -194,7 +194,7 @@ export default function App() {
     if (!currentUser) return;
     const key = db.getApiKey();
     if (!key) {
-      alert("Please configure an NVIDIA API Key in Settings first.");
+      alert("Please configure a Gemini API Key in Settings first.");
       setShowSettings(true);
       return;
     }
@@ -204,7 +204,7 @@ export default function App() {
     }
 
     setView('loading');
-    setLoadingText("NVIDIA Llama Model is analyzing emotional markers...");
+    setLoadingText("Gemini is analyzing emotional markers...");
     
     try {
       // 1. Create database record for entry
@@ -384,12 +384,12 @@ export default function App() {
                   </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: '1.75rem' }}>
-                  <label className="form-label" htmlFor="api-key-setup">NVIDIA API Key</label>
+                  <label className="form-label" htmlFor="api-key-setup">Gemini API Key</label>
                   <input 
                     type="password" 
                     id="api-key-setup"
                     className="form-input" 
-                    placeholder="Enter NVIDIA API key" 
+                    placeholder="Enter Gemini API key" 
                     value={apiKeyInput} 
                     onChange={(e) => setApiKeyInput(e.target.value)} 
                     required 
@@ -432,7 +432,7 @@ export default function App() {
           <div className="loading-view">
             <div className="spinner"></div>
             <p className="loading-text">{loadingText}</p>
-            <p style={{ color: 'var(--text-muted)' }}>Using NVIDIA Llama model to identify stress biomarkers...</p>
+            <p style={{ color: 'var(--text-muted)' }}>Using Gemini AI model to identify stress biomarkers...</p>
           </div>
         </main>
       </div>
@@ -486,12 +486,12 @@ export default function App() {
               <Settings size={20} style={{ color: 'var(--accent-cyan)' }} /> Settings
             </h3>
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label" htmlFor="api-key-settings">NVIDIA API Key</label>
+              <label className="form-label" htmlFor="api-key-settings">Gemini API Key</label>
               <input 
                 type="password" 
                 id="api-key-settings"
                 className="form-input" 
-                placeholder="Enter NVIDIA API key" 
+                placeholder="Enter Gemini API key" 
                 value={settingsKeyInput} 
                 onChange={(e) => setSettingsKeyInput(e.target.value)} 
               />
