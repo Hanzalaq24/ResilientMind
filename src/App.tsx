@@ -1,29 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Brain, 
-  User, 
-  LogOut, 
-  Smile, 
-  Moon, 
-  BookOpen, 
-  Sparkles, 
-  AlertTriangle, 
-  CheckCircle, 
-  MessageSquare, 
-  Send, 
-  ArrowLeft,
-  Calendar,
-  Heart,
-  Settings,
-  X
-} from 'lucide-react';
 import { db } from './lib/db';
 import type { User as UserType, JournalEntry, AIInsight } from './lib/db';
 import { analyzeJournal, getCompanionChatResponse } from './lib/gemini';
 import type { ChatMessage, AIInsightOutput } from './lib/gemini';
 import StressTrendChart from './components/StressTrendChart';
 
-// Security: HTML/XSS input sanitizer — strips dangerous characters
+// Security: HTML/XSS input sanitizer
 const sanitizeInput = (input: string): string => {
   return input
     .replace(/</g, '&lt;')
@@ -38,43 +20,33 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [nameInput, setNameInput] = useState('');
   const [examTypeInput, setExamTypeInput] = useState('JEE');
-  const [apiKeyInput, setApiKeyInput] = useState(import.meta.env.VITE_GEMINI_API_KEY || '');
-  
-  // Daily check-in form state
-  const [mood, setMood] = useState(5);
+
+  // Daily check-in state
+  const [mood, setMood] = useState(7);
   const [sleep, setSleepHours] = useState(7);
   const [study, setStudyHours] = useState(8);
   const [journalText, setJournalText] = useState('');
-  
-  // Navigation & Flow states
+
+  // Navigation
   const [view, setView] = useState<'form' | 'loading' | 'insight' | 'chat'>('form');
-  const [loadingText, setLoadingText] = useState('Companion is processing your log...');
+  const [loadingText, setLoadingText] = useState('Analyzing your wellbeing...');
   const [activeInsight, setActiveInsight] = useState<AIInsight | null>(null);
   const [activeJournalEntry, setActiveJournalEntry] = useState<JournalEntry | null>(null);
   const [historyEntries, setHistoryEntries] = useState<{ entry: JournalEntry; insight: AIInsight | null }[]>([]);
-  
+
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [userInputMessage, setUserInputMessage] = useState('');
   const [isChatTyping, setIsChatTyping] = useState(false);
-  
-  // Settings modal state
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsKeyInput, setSettingsKeyInput] = useState(import.meta.env.VITE_GEMINI_API_KEY || '');
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // Load current user, key, and history on mount
   useEffect(() => {
     const user = db.getCurrentUser();
-    const savedKey = db.getApiKey();
+    // Load key from env if not in db
     const envKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-    if (savedKey) {
-      setApiKeyInput(savedKey);
-      setSettingsKeyInput(savedKey);
-    } else if (envKey) {
-      setApiKeyInput(envKey);
-      setSettingsKeyInput(envKey);
+    const savedKey = db.getApiKey();
+    if (!savedKey && envKey) {
       db.saveApiKey(envKey);
     }
     if (user) {
@@ -83,7 +55,6 @@ export default function App() {
     }
   }, []);
 
-  // Scroll chat to bottom when message arrives
   useEffect(() => {
     if (chatBottomRef.current) {
       chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -102,13 +73,7 @@ export default function App() {
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nameInput.trim()) return;
-    if (!apiKeyInput.trim()) {
-      alert('Please enter a Gemini API Key to enable AI features.');
-      return;
-    }
-    // Security: sanitize name input before saving
     const safeName = sanitizeInput(nameInput);
-    db.saveApiKey(apiKeyInput.trim());
     const user = db.createUser(safeName, examTypeInput);
     setCurrentUser(user);
     loadHistory(user.id);
@@ -126,42 +91,27 @@ export default function App() {
   const handleAnalyze = async () => {
     if (!currentUser) return;
     const key = db.getApiKey();
-    if (!key) {
-      alert("Please configure a Gemini API Key in Settings first.");
-      setShowSettings(true);
-      return;
-    }
     if (!journalText.trim()) {
-      alert("Please write a journal entry to analyze your stress levels.");
+      alert('Please write a journal entry to analyze your wellbeing.');
       return;
     }
 
     setView('loading');
-    setLoadingText("Gemini is analyzing emotional markers...");
-    
+    setLoadingText('Gemini is analyzing your emotional markers...');
+
     try {
-      // Security: sanitize journal entry before saving
       const safeJournalText = sanitizeInput(journalText);
 
-      // 1. Create database record for entry
-      const entry = db.createJournalEntry(
-        currentUser.id,
-        mood,
-        sleep,
-        study,
-        safeJournalText
-      );
-      
-      // 2. Fetch past entries to provide trend analysis
+      const entry = db.createJournalEntry(currentUser.id, mood, sleep, study, safeJournalText);
+
       const recentHistoryData = historyEntries.slice(0, 5).map(h => ({
         moodScore: h.entry.moodScore,
         sleepHours: h.entry.sleepHours,
         studyHours: h.entry.studyHours,
-        journalText: h.entry.journalText
+        journalText: h.entry.journalText,
       }));
 
-      // 3. Call AI Analysis API passing key
-      setLoadingText("Detecting hidden stress triggers and predicting burnout risk...");
+      setLoadingText('Detecting hidden stress triggers and predicting burnout risk...');
       const aiResult: AIInsightOutput = await analyzeJournal(
         key,
         mood,
@@ -173,90 +123,58 @@ export default function App() {
         recentHistoryData
       );
 
-      // 4. Save AI Insights in mock DB
       const insight = db.saveAIInsight(currentUser.id, entry.id, aiResult);
-      
-      // Update local states
       setActiveJournalEntry(entry);
       setActiveInsight(insight);
       loadHistory(currentUser.id);
-      
-      // Reset form
+
       setJournalText('');
-      setMood(5);
+      setMood(7);
       setSleepHours(7);
       setStudyHours(8);
-      
       setView('insight');
     } catch (err) {
       console.error(err);
       setView('form');
-      alert("Failed to analyze stress patterns. Please check your API key in Settings and try again.");
+      alert('Failed to analyze. Please check your Gemini API Key in .env and try again.');
     }
   };
 
-  // Pre-fill fields for a quick Hackathon demo scenario
   const fillDemoScenario = () => {
     setMood(3);
     setSleepHours(4);
     setStudyHours(11);
-    setJournalText("My mock test went terribly. I don't think I can crack JEE.");
-    
-    // Auto-fill a demo API key if they don't have one configured
-    const existingKey = db.getApiKey();
-    const envKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-    if (!existingKey && envKey) {
-      setApiKeyInput(envKey);
-      setSettingsKeyInput(envKey);
-      db.saveApiKey(envKey);
-    }
+    setJournalText("My mock test went terribly. I don't think I can crack JEE. I've been studying 11 hours but nothing is sinking in.");
   };
 
   const selectHistoryItem = (item: { entry: JournalEntry; insight: AIInsight | null }) => {
     setActiveJournalEntry(item.entry);
     setActiveInsight(item.insight);
-    if (item.insight) {
-      setView('insight');
-    }
+    if (item.insight) setView('insight');
   };
 
   const startCompanionChat = () => {
     if (!currentUser) return;
-    
-    // Construct dynamic starter question context-aware
-    let contextGreeting = "Hey there! I'm your Wellness Companion. How are you feeling right now?";
+    let contextGreeting = "Hey! I'm your AI Wellness Companion. How are you feeling right now?";
     if (activeInsight) {
       const triggers = activeInsight.stressTrigger.join(' and ');
-      contextGreeting = `Hi ${currentUser.name}, I noticed that ${triggers || 'recent studies'} have been causing you stress, and your burnout risk is ${activeInsight.burnoutRisk.level}. Want to talk about what's going on or today's routine?`;
+      contextGreeting = `Hi ${currentUser.name}! I noticed ${triggers || 'some stress patterns'} affecting you, with a ${activeInsight.burnoutRisk.level} burnout risk. Want to talk about it?`;
     }
-    
-    setChatMessages([
-      { role: 'model', content: contextGreeting }
-    ]);
+    setChatMessages([{ role: 'model', content: contextGreeting }]);
     setView('chat');
   };
 
   const sendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userInputMessage.trim() || !currentUser) return;
-
-    // Security: sanitize chat message before use
     const userMsg = sanitizeInput(userInputMessage);
     const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
-    
     setChatMessages(updatedMessages);
     setUserInputMessage('');
     setIsChatTyping(true);
-
     try {
       const key = db.getApiKey();
-      const response = await getCompanionChatResponse(
-        key,
-        updatedMessages,
-        currentUser.name,
-        currentUser.examType,
-        activeInsight
-      );
+      const response = await getCompanionChatResponse(key, updatedMessages, currentUser.name, currentUser.examType, activeInsight);
       setChatMessages([...updatedMessages, { role: 'model' as const, content: response }]);
     } catch (err) {
       console.error(err);
@@ -265,474 +183,346 @@ export default function App() {
     }
   };
 
-  const saveSettings = () => {
-    db.saveApiKey(settingsKeyInput.trim());
-    setApiKeyInput(settingsKeyInput.trim());
-    setShowSettings(false);
-  };
-
-  // Welcome onboarding screen
+  // ─── ONBOARDING SCREEN ─────────────────────────────────────────────────────
   if (!currentUser) {
     return (
-      <div className="app-container">
-        <header>
-          <div className="logo">
-            <Brain size={28} />
-            <span>ResilientMind</span>
-            <span className="logo-sub">Exam Wellness</span>
-          </div>
-        </header>
-        <main>
-          <div className="welcome-container">
-            <div className="badge-glow">AI-Powered Exam Wellness Companion</div>
-            <h1 className="welcome-title">Your AI Wellness Companion for Exam Success</h1>
-            <p className="welcome-subtitle">
-              Detect stress early, prevent burnout, and stay emotionally resilient during JEE, NEET, UPSC, CAT, GATE, and board exam preparation.
-            </p>
-            <div className="glass-panel setup-card">
-              <h3 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.5rem', fontSize: '1.25rem' }}>Start Your Journey</h3>
-              <form onSubmit={handleRegister}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="student-name">Your Name</label>
-                  <input 
-                    type="text" 
-                    id="student-name"
-                    className="form-input" 
-                    placeholder="Enter your name" 
-                    value={nameInput} 
-                    onChange={(e) => setNameInput(e.target.value)} 
-                    required 
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="exam-select">Target Exam</label>
-                  <select 
-                    id="exam-select"
-                    className="form-select"
-                    value={examTypeInput}
-                    onChange={(e) => setExamTypeInput(e.target.value)}
-                  >
-                    <option value="JEE">JEE Main & Advanced</option>
-                    <option value="NEET">NEET UG</option>
-                    <option value="UPSC">UPSC Civil Services</option>
-                    <option value="CAT">CAT (MBA Entrance)</option>
-                    <option value="GATE">GATE</option>
-                    <option value="Board Exams">10th / 12th Board Exams</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: '1.75rem' }}>
-                  <label className="form-label" htmlFor="api-key-setup">Gemini API Key</label>
-                  <input 
-                    type="password" 
-                    id="api-key-setup"
-                    className="form-input" 
-                    placeholder="Enter Gemini API key" 
-                    value={apiKeyInput} 
-                    onChange={(e) => setApiKeyInput(e.target.value)} 
-                    required 
-                  />
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                    Stored strictly locally in your browser's LocalStorage. Never uploaded to a server.
-                  </span>
-                </div>
-                <button type="submit" className="action-btn">
-                  <Sparkles size={18} /> Get Started
-                </button>
-              </form>
-              <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                <button 
-                  className="logout-btn" 
-                  onClick={fillDemoScenario}
-                  aria-label="Auto-fill demo profile and API key"
-                  style={{ width: '100%', borderColor: 'rgba(0, 242, 254, 0.2)', color: 'var(--accent-cyan)' }}
-                >
-                  ⚡ Auto-Fill Demo Profile &amp; Key
-                </button>
-              </div>
+      <div className="rm-app">
+        <header className="rm-nav">
+          <div className="rm-nav-inner">
+            <div className="rm-brand">
+              <div className="rm-brand-icon">R</div>
+              <span>ResilientMind</span>
             </div>
           </div>
+        </header>
+        <main className="rm-onboarding">
+          <div className="rm-onboarding-hero">
+            <div className="rm-badge">AI-Powered · Exam Wellness</div>
+            <h1 className="rm-hero-title">Your cognitive sanctuary<br />for exam success</h1>
+            <p className="rm-hero-sub">
+              Detect stress early, prevent burnout, and stay emotionally resilient during JEE, NEET, UPSC, CAT, GATE and board exam preparation.
+            </p>
+          </div>
+          <div className="rm-card rm-onboard-card">
+            <h2 className="rm-card-title">Begin your journey</h2>
+            <form onSubmit={handleRegister} className="rm-form">
+              <div className="rm-field">
+                <label className="rm-label" htmlFor="student-name">Your Name</label>
+                <input
+                  type="text"
+                  id="student-name"
+                  className="rm-input"
+                  placeholder="Enter your name"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="rm-field">
+                <label className="rm-label" htmlFor="exam-select">Target Exam</label>
+                <select
+                  id="exam-select"
+                  className="rm-input rm-select"
+                  value={examTypeInput}
+                  onChange={(e) => setExamTypeInput(e.target.value)}
+                >
+                  <option value="JEE">JEE Main &amp; Advanced</option>
+                  <option value="NEET">NEET UG</option>
+                  <option value="UPSC">UPSC Civil Services</option>
+                  <option value="CAT">CAT (MBA Entrance)</option>
+                  <option value="GATE">GATE</option>
+                  <option value="Board Exams">10th / 12th Board Exams</option>
+                </select>
+              </div>
+              <button type="submit" className="rm-btn-primary">
+                Get Started
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </form>
+            <button className="rm-btn-ghost" onClick={fillDemoScenario} aria-label="Auto-fill demo scenario">
+              ⚡ Auto-fill Demo Scenario
+            </button>
+          </div>
         </main>
       </div>
     );
   }
 
-  // Loading Screen
+  // ─── LOADING SCREEN ────────────────────────────────────────────────────────
   if (view === 'loading') {
     return (
-      <div className="app-container">
-        <header>
-          <div className="logo">
-            <Brain size={28} />
-            <span>ResilientMind</span>
+      <div className="rm-app">
+        <header className="rm-nav">
+          <div className="rm-nav-inner">
+            <div className="rm-brand">
+              <div className="rm-brand-icon">R</div>
+              <span>ResilientMind</span>
+            </div>
           </div>
         </header>
-        <main>
-          <div className="loading-view" role="status" aria-live="polite" aria-label="Loading AI analysis">
-            <div className="spinner" aria-hidden="true"></div>
-            <p className="loading-text">{loadingText}</p>
-            <p style={{ color: 'var(--text-muted)' }}>Using Gemini AI model to identify stress biomarkers...</p>
-          </div>
+        <main className="rm-loading-screen" role="status" aria-live="polite" aria-label="Loading AI analysis">
+          <div className="rm-pulse-ring" aria-hidden="true"></div>
+          <div className="rm-loading-icon" aria-hidden="true">✦</div>
+          <p className="rm-loading-title">{loadingText}</p>
+          <p className="rm-loading-sub">Using Gemini AI to identify stress biomarkers</p>
         </main>
       </div>
     );
   }
 
+  // ─── MAIN APP ──────────────────────────────────────────────────────────────
   return (
-    <div className="app-container">
-      <header>
-        <div className="logo">
-          <Brain size={28} />
-          <span>ResilientMind</span>
-        </div>
-        <div className="user-nav-badge">
-          <div className="nav-username">
-            <User size={14} style={{ marginRight: '4px', verticalAlign: 'middle', color: 'var(--accent-cyan)' }} />
-            <span>{currentUser.name} ({currentUser.examType})</span>
+    <div className="rm-app">
+      {/* Nav */}
+      <header className="rm-nav">
+        <div className="rm-nav-inner">
+          <div className="rm-brand">
+            <div className="rm-brand-icon">R</div>
+            <span>ResilientMind</span>
           </div>
-          <button className="logout-btn" onClick={() => setShowSettings(true)} aria-label="Open settings" style={{ marginRight: '0.5rem' }}>
-            <Settings size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Settings
-          </button>
-          <button className="logout-btn" onClick={handleLogout} aria-label="Sign out of your account">
-            <LogOut size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Sign Out
-          </button>
+          <nav className="rm-nav-links">
+            <span className="rm-nav-user">
+              {currentUser.name} · {currentUser.examType}
+            </span>
+            <button
+              className="rm-nav-btn"
+              onClick={handleLogout}
+              aria-label="Sign out"
+            >
+              Sign Out
+            </button>
+          </nav>
         </div>
       </header>
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem'
-        }}>
-          <div className="glass-panel" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" style={{ width: '100%', maxWidth: '400px', padding: '2rem', position: 'relative' }}>
-            <button 
-              onClick={() => setShowSettings(false)}
-              aria-label="Close settings"
-              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}
-            >
-              <X size={20} aria-hidden="true" />
-            </button>
-            <h3 id="settings-dialog-title" style={{ fontFamily: 'var(--font-title)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Settings size={20} style={{ color: 'var(--accent-cyan)' }} aria-hidden="true" /> Settings
-            </h3>
-            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label" htmlFor="api-key-settings">Gemini API Key</label>
-              <input 
-                type="password" 
-                id="api-key-settings"
-                className="form-input" 
-                placeholder="Enter Gemini API key" 
-                value={settingsKeyInput} 
-                onChange={(e) => setSettingsKeyInput(e.target.value)} 
-              />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                Stored locally in your browser.
-              </span>
-            </div>
-            <button className="action-btn" onClick={saveSettings}>Save Changes</button>
-          </div>
-        </div>
-      )}
-
-      <main>
+      <main className="rm-main">
+        {/* ── DAILY CHECK-IN VIEW ── */}
         {view === 'form' && (
-          <div className="dashboard-grid">
-            {/* Main check-in panel */}
-            <div className="glass-panel checkin-card">
-              <div className="card-header-row">
-                <div className="card-title-badge">
-                  <Heart size={20} />
-                  <span>Daily Wellness Log</span>
-                </div>
-                <button className="btn-secondary" onClick={fillDemoScenario}>
-                  ⚡ Auto-Fill Demo Scenario
-                </button>
-              </div>
+          <div className="rm-dashboard">
+            {/* Left: Check-in form */}
+            <div className="rm-checkin-col">
+              <section className="rm-checkin-hero">
+                <h1 className="rm-page-title">Today's Reflection</h1>
+                <p className="rm-page-sub">Take a moment for yourself. Your wellness drives your performance.</p>
+              </section>
 
-              <div className="sliders-row">
-                <div className="slider-container">
-                  <div className="slider-header">
-                    <label className="form-label" htmlFor="mood-slider" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Smile size={16} /> Mood Level
-                    </label>
-                    <span className="slider-val">{mood}/10</span>
+              <div className="rm-card rm-checkin-card">
+                <div className="rm-card-top">
+                  <span className="rm-card-label">Daily Wellness Log</span>
+                  <button className="rm-btn-ghost-sm" onClick={fillDemoScenario} aria-label="Auto-fill demo">⚡ Demo</button>
+                </div>
+
+                {/* Mood Slider */}
+                <div className="rm-field-block">
+                  <div className="rm-field-row">
+                    <label className="rm-field-heading" htmlFor="mood-slider">How's your mood today?</label>
+                    <span className={`rm-val-chip ${mood <= 3 ? 'rm-chip-low' : mood <= 7 ? 'rm-chip-mid' : 'rm-chip-high'}`}>{mood}/10</span>
                   </div>
-                  <input 
-                    type="range" 
-                    id="mood-slider"
-                    min="1" 
-                    max="10" 
-                    className="input-slider" 
-                    value={mood} 
+                  <input
+                    type="range" id="mood-slider" min="1" max="10"
+                    className="rm-slider" value={mood}
                     onChange={(e) => setMood(Number(e.target.value))}
                     aria-label={`Mood level: ${mood} out of 10`}
-                    aria-valuemin={1}
-                    aria-valuemax={10}
-                    aria-valuenow={mood}
+                    aria-valuemin={1} aria-valuemax={10} aria-valuenow={mood}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                    <span>Stressed</span>
-                    <span>Amazing</span>
+                  <div className="rm-slider-labels">
+                    <span>Exhausted</span><span>Calm</span><span>Energized</span>
                   </div>
                 </div>
 
-                <div className="slider-container">
-                  <div className="slider-header">
-                    <label className="form-label" htmlFor="sleep-slider" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Moon size={16} /> Sleep Duration
+                {/* Sleep + Study grid */}
+                <div className="rm-stats-grid">
+                  <div className="rm-field-block">
+                    <label className="rm-stat-label" htmlFor="sleep-input">
+                      <span className="rm-stat-icon">🌙</span> Hours of Sleep
                     </label>
-                    <span className="slider-val">{sleep} hrs</span>
+                    <input
+                      type="number" id="sleep-input" className="rm-input rm-stat-input"
+                      min="0" max="24" value={sleep}
+                      onChange={(e) => setSleepHours(Number(e.target.value))}
+                      aria-label={`Sleep hours: ${sleep}`}
+                    />
                   </div>
-                  <input 
-                    type="range" 
-                    id="sleep-slider"
-                    min="2" 
-                    max="14" 
-                    className="input-slider" 
-                    value={sleep} 
-                    onChange={(e) => setSleepHours(Number(e.target.value))}
-                    aria-label={`Sleep hours: ${sleep} hours`}
-                    aria-valuemin={2}
-                    aria-valuemax={14}
-                    aria-valuenow={sleep}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                    <span>Poor</span>
-                    <span>Restful</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="sliders-row" style={{ gridTemplateColumns: '1fr', marginBottom: '1.5rem' }}>
-                <div className="slider-container">
-                  <div className="slider-header">
-                    <label className="form-label" htmlFor="study-slider" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <BookOpen size={16} /> Study Hours (Today)
+                  <div className="rm-field-block">
+                    <label className="rm-stat-label" htmlFor="study-input">
+                      <span className="rm-stat-icon">📚</span> Study Hours
                     </label>
-                    <span className="slider-val">{study} hrs</span>
+                    <input
+                      type="number" id="study-input" className="rm-input rm-stat-input"
+                      min="0" max="24" value={study}
+                      onChange={(e) => setStudyHours(Number(e.target.value))}
+                      aria-label={`Study hours: ${study}`}
+                    />
                   </div>
-                  <input 
-                    type="range" 
-                    id="study-slider"
-                    min="0" 
-                    max="18" 
-                    className="input-slider" 
-                    value={study} 
-                    onChange={(e) => setStudyHours(Number(e.target.value))}
-                    aria-label={`Study hours today: ${study} hours`}
-                    aria-valuemin={0}
-                    aria-valuemax={18}
-                    aria-valuenow={study}
+                </div>
+
+                {/* Journal */}
+                <div className="rm-field-block">
+                  <label className="rm-field-heading" htmlFor="journal-input">How are you feeling today?</label>
+                  <textarea
+                    id="journal-input" rows={5} className="rm-textarea"
+                    placeholder="Aaj Physics mock test kharab gaya. Bahut demotivated feel kar raha hu..."
+                    value={journalText}
+                    onChange={(e) => setJournalText(e.target.value)}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                    <span>0h</span>
-                    <span>18h+</span>
+                  <p className="rm-field-hint">Writing down frustrations helps clear cognitive space for better learning.</p>
+                </div>
+
+                {/* CTA */}
+                <div className="rm-cta-wrapper">
+                  <div className="rm-cta-glow" aria-hidden="true"></div>
+                  <button className="rm-btn-primary rm-btn-full" onClick={handleAnalyze} aria-label="Analyze my wellbeing">
+                    Analyze My Wellbeing
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  </button>
+                </div>
+
+                {/* AI tip card */}
+                <div className="rm-tip-card">
+                  <span className="rm-tip-icon" aria-hidden="true">💡</span>
+                  <div>
+                    <p className="rm-tip-heading">AI Support Insight</p>
+                    <p className="rm-tip-body">Sharing your thoughts is the first step toward reducing cortisol levels. Our AI will analyze your patterns to suggest a personalized study-break routine.</p>
                   </div>
                 </div>
               </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="journal-input" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Brain size={16} /> Journal Log / Emotional Dump
-                </label>
-                <textarea 
-                  id="journal-input"
-                  rows={4} 
-                  className="form-textarea" 
-                  placeholder="How did study go? Are you feeling pressure? Describe mock scores or mindset..." 
-                  value={journalText} 
-                  onChange={(e) => setJournalText(e.target.value)}
-                />
-              </div>
-
-              <button className="action-btn" onClick={handleAnalyze} aria-label="Analyze stress and predict burnout" style={{ marginTop: '0.5rem' }}>
-                <Sparkles size={18} aria-hidden="true" /> Analyze Stress &amp; Predict Burnout
-              </button>
             </div>
 
-            {/* Sidebar history & SVG Chart */}
-            <div className="glass-panel history-sidebar">
-              <div className="sidebar-title">
-                <Calendar size={18} />
-                <span>Wellness Dashboard</span>
-              </div>
-              
-              {/* Render Trend Chart */}
-              <StressTrendChart history={historyEntries} />
+            {/* Right: Wellness sidebar */}
+            <div className="rm-sidebar-col">
+              <div className="rm-card rm-sidebar-card">
+                <p className="rm-card-label">Wellness Dashboard</p>
+                <StressTrendChart history={historyEntries} />
 
-              <div className="history-list" style={{ marginTop: '1.5rem' }}>
-                {historyEntries.length === 0 ? (
-                  <div className="empty-history">
-                    <Smile size={24} />
-                    <p>No logged check-ins yet. Make your first entry!</p>
-                  </div>
-                ) : (
-                  historyEntries.map((item) => (
-                    <div 
-                      key={item.entry.id} 
-                      className={`history-item ${activeJournalEntry?.id === item.entry.id ? 'active' : ''}`}
-                      onClick={() => selectHistoryItem(item)}
-                    >
-                      <div className="history-item-header">
-                        <span>{new Date(item.entry.createdAt).toLocaleDateString()}</span>
-                        <span>Mood: {item.entry.moodScore}/10</span>
-                      </div>
-                      <div className="history-item-body">
-                        {item.entry.journalText}
-                      </div>
-                      <div className="history-item-metrics">
-                        <div className="metric-badge">
-                          <Moon size={10} style={{ marginRight: '2px' }} /> {item.entry.sleepHours}h sleep
-                        </div>
-                        <div className="metric-badge">
-                          <BookOpen size={10} style={{ marginRight: '2px' }} /> {item.entry.studyHours}h study
-                        </div>
-                        {item.insight && (
-                          <span style={{ 
-                            marginLeft: 'auto', 
-                            fontSize: '0.7rem', 
-                            fontWeight: '600',
-                            color: item.insight.burnoutRisk.level === 'High' ? 'var(--color-high)' : item.insight.burnoutRisk.level === 'Medium' ? 'var(--color-medium)' : 'var(--color-low)'
-                          }}>
-                            Risk: {item.insight.burnoutRisk.level}
-                          </span>
-                        )}
-                      </div>
+                <div className="rm-history-list">
+                  {historyEntries.length === 0 ? (
+                    <div className="rm-empty-state">
+                      <span className="rm-empty-icon">📊</span>
+                      <p>No check-ins yet. Make your first entry!</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    historyEntries.map((item) => (
+                      <button
+                        key={item.entry.id}
+                        className={`rm-history-item ${activeJournalEntry?.id === item.entry.id ? 'rm-history-active' : ''}`}
+                        onClick={() => selectHistoryItem(item)}
+                      >
+                        <div className="rm-history-top">
+                          <span className="rm-history-date">{new Date(item.entry.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                          <span className="rm-history-mood">Mood {item.entry.moodScore}/10</span>
+                          {item.insight && (
+                            <span className={`rm-risk-chip rm-risk-${item.insight.burnoutRisk.level.toLowerCase()}`}>
+                              {item.insight.burnoutRisk.level}
+                            </span>
+                          )}
+                        </div>
+                        <p className="rm-history-preview">{item.entry.journalText.slice(0, 70)}...</p>
+                        <div className="rm-history-meta">
+                          <span>🌙 {item.entry.sleepHours}h sleep</span>
+                          <span>📚 {item.entry.studyHours}h study</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* ── INSIGHT VIEW ── */}
         {view === 'insight' && activeInsight && activeJournalEntry && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <button className="btn-secondary" onClick={() => setView('form')} aria-label="Go back to dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <ArrowLeft size={16} aria-hidden="true" /> Dashboard
+          <div className="rm-insight-view">
+            <div className="rm-view-header">
+              <button className="rm-back-btn" onClick={() => setView('form')} aria-label="Go back to dashboard">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Dashboard
               </button>
-              <h3 style={{ fontFamily: 'var(--font-title)', color: 'var(--text-muted)' }}>
-                Analysis for {new Date(activeJournalEntry.createdAt).toLocaleDateString()}
-              </h3>
+              <span className="rm-view-date">Analysis · {new Date(activeJournalEntry.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long' })}</span>
             </div>
 
-            <div className="insights-container">
-              {/* Main Insights list */}
-              <div className="insights-main-flow">
-                {/* 1. Emotional Analysis */}
-                <div className="glass-panel insight-card">
-                  <div className="card-header-row">
-                    <div className="card-title-badge">
-                      <Smile size={18} />
-                      <span>Emotional Analysis</span>
+            <div className="rm-insights-grid">
+              {/* Main flow */}
+              <div className="rm-insights-main">
+                {/* Emotional Analysis */}
+                <div className="rm-card rm-insight-card">
+                  <div className="rm-card-top">
+                    <span className="rm-card-label">😊 Emotional Analysis</span>
+                  </div>
+                  <div className="rm-emotion-row">
+                    <div className="rm-emotion-pill rm-emotion-primary">
+                      <span className="rm-emotion-type">Primary</span>
+                      <span className="rm-emotion-val">{activeInsight.emotion.primary}</span>
+                    </div>
+                    <div className="rm-emotion-pill rm-emotion-secondary">
+                      <span className="rm-emotion-type">Secondary</span>
+                      <span className="rm-emotion-val">{activeInsight.emotion.secondary}</span>
                     </div>
                   </div>
-                  <div className="emotions-grid">
-                    <div className="emotion-pill">
-                      <div className="emotion-type">Primary Emotion</div>
-                      <div className="emotion-val" style={{ color: 'var(--accent-cyan)' }}>{activeInsight.emotion.primary}</div>
-                    </div>
-                    <div className="emotion-pill">
-                      <div className="emotion-type">Secondary Emotion</div>
-                      <div className="emotion-val" style={{ color: 'var(--accent-purple)' }}>{activeInsight.emotion.secondary}</div>
-                    </div>
-                  </div>
-                  <p className="emotion-summary-text">{activeInsight.emotion.summary}</p>
+                  <p className="rm-insight-text">{activeInsight.emotion.summary}</p>
                 </div>
 
-                {/* 2. Hidden Stress Trigger Detection */}
-                <div className="glass-panel insight-card">
-                  <div className="card-header-row">
-                    <div className="card-title-badge">
-                      <AlertTriangle size={18} />
-                      <span>Hidden Stress Triggers</span>
-                    </div>
+                {/* Stress Triggers */}
+                <div className="rm-card rm-insight-card">
+                  <div className="rm-card-top">
+                    <span className="rm-card-label">⚠️ Hidden Stress Triggers</span>
                   </div>
-                  <div className="triggers-list">
-                    {activeInsight.stressTrigger.map((trigger, i) => (
-                      <span key={i} className="trigger-badge">
-                        <AlertTriangle size={14} />
-                        {trigger}
-                      </span>
-                    ))}
-                    {activeInsight.stressTrigger.length === 0 && (
-                      <span className="trigger-badge">No high-stress triggers detected.</span>
+                  <div className="rm-triggers">
+                    {activeInsight.stressTrigger.length > 0 ? (
+                      activeInsight.stressTrigger.map((t, i) => (
+                        <span key={i} className="rm-trigger-chip">{t}</span>
+                      ))
+                    ) : (
+                      <span className="rm-trigger-chip">No high-stress triggers detected</span>
                     )}
                   </div>
                 </div>
 
-                {/* 3. Burnout Risk Prediction */}
-                <div className="glass-panel insight-card">
-                  <div className="card-header-row">
-                    <div className="card-title-badge">
-                      <Brain size={18} />
-                      <span>Burnout Risk Assessment</span>
-                    </div>
-                    <div className={`status-indicator ${activeInsight.burnoutRisk.level.toLowerCase()}`}>
-                      Burnout Risk: {activeInsight.burnoutRisk.level}
-                    </div>
+                {/* Burnout Risk */}
+                <div className="rm-card rm-insight-card">
+                  <div className="rm-card-top">
+                    <span className="rm-card-label">🧠 Burnout Risk Assessment</span>
+                    <span className={`rm-risk-chip rm-risk-${activeInsight.burnoutRisk.level.toLowerCase()}`}>
+                      {activeInsight.burnoutRisk.level} Risk
+                    </span>
                   </div>
-                  <p className="emotion-summary-text" style={{ fontWeight: '500' }}>
-                    {activeInsight.burnoutRisk.reason}
-                  </p>
+                  <p className="rm-insight-text">{activeInsight.burnoutRisk.reason}</p>
                 </div>
 
-                {/* 4. Personalized Recovery Plan */}
-                <div className="glass-panel insight-card">
-                  <div className="card-header-row">
-                    <div className="card-title-badge">
-                      <CheckCircle size={18} />
-                      <span>Today's Personalized Recovery Plan</span>
-                    </div>
+                {/* Recovery Plan */}
+                <div className="rm-card rm-insight-card">
+                  <div className="rm-card-top">
+                    <span className="rm-card-label">✅ Personalized Recovery Plan</span>
                   </div>
-                  <div className="recovery-list">
+                  <ol className="rm-recovery-list">
                     {activeInsight.recoveryPlan.map((step, i) => (
-                      <div key={i} className="recovery-item-box">
-                        <div className="recovery-index">{i + 1}</div>
-                        <div className="recovery-text">{step}</div>
-                      </div>
+                      <li key={i} className="rm-recovery-item">
+                        <span className="rm-recovery-num">{i + 1}</span>
+                        <span className="rm-recovery-text">{step}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ol>
                 </div>
               </div>
 
-              {/* Sidebar with Future self message & chat action */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {/* Future Self Message */}
-                <div className="glass-panel insight-card future-card">
-                  <div className="card-header-row">
-                    <div className="card-title-badge" style={{ color: '#c084fc' }}>
-                      <Sparkles size={18} />
-                      <span>Future Self Letter</span>
-                    </div>
+              {/* Sidebar */}
+              <div className="rm-insights-aside">
+                {/* Future Self Letter */}
+                <div className="rm-card rm-future-card">
+                  <div className="rm-card-top">
+                    <span className="rm-card-label" style={{ color: '#7c3aed' }}>✨ Future Self Letter</span>
                   </div>
-                  <div className="future-letter-content">
-                    "{activeInsight.futureMessage}"
-                  </div>
-                  <div className="future-signature">
-                    — Your Future Self
-                  </div>
+                  <blockquote className="rm-future-quote">"{activeInsight.futureMessage}"</blockquote>
+                  <p className="rm-future-sig">— Your Future Self</p>
                 </div>
 
-                {/* Call to Chat Companion */}
-                <div className="glass-panel insight-card" style={{ textAlign: 'center', border: '1px solid rgba(0, 242, 254, 0.2)' }}>
-                  <MessageSquare size={36} style={{ color: 'var(--accent-cyan)', marginBottom: '1rem' }} />
-                  <h4 style={{ fontFamily: 'var(--font-title)', fontSize: '1.2rem', marginBottom: '0.5rem' }}>Talk to Companion</h4>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                    Speak with our empathetic wellness chatbot to talk through today's hurdles.
-                  </p>
-                  <button className="action-btn" onClick={startCompanionChat}>
-                    <MessageSquare size={16} /> Open Companion Chat
+                {/* Talk to Companion */}
+                <div className="rm-card rm-chat-cta-card">
+                  <div className="rm-chat-cta-icon" aria-hidden="true">💬</div>
+                  <h3 className="rm-chat-cta-title">Talk to Companion</h3>
+                  <p className="rm-chat-cta-sub">Speak with our empathetic wellness AI to process today's challenges.</p>
+                  <button className="rm-btn-primary rm-btn-full" onClick={startCompanionChat} aria-label="Open companion chat">
+                    Open Companion Chat
                   </button>
                 </div>
               </div>
@@ -740,49 +530,62 @@ export default function App() {
           </div>
         )}
 
+        {/* ── CHAT VIEW ── */}
         {view === 'chat' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <button className="btn-secondary" onClick={() => setView(activeInsight ? 'insight' : 'form')} aria-label="Go back" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <ArrowLeft size={16} aria-hidden="true" /> Back
+          <div className="rm-chat-view">
+            <div className="rm-view-header">
+              <button className="rm-back-btn" onClick={() => setView(activeInsight ? 'insight' : 'form')} aria-label="Go back">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back
               </button>
-              <h3 style={{ fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Brain size={20} style={{ color: 'var(--accent-cyan)' }} /> AI Wellness Companion Chat
-              </h3>
+              <span className="rm-view-date">🧠 AI Wellness Companion</span>
             </div>
 
-            <div className="glass-panel chat-container">
-              <div className="chat-messages">
+            <div className="rm-card rm-chat-card">
+              <div className="rm-chat-messages">
                 {chatMessages.map((msg, idx) => (
-                  <div key={idx} className={`chat-bubble ${msg.role === 'model' ? 'assistant' : 'user'}`}>
+                  <div key={idx} className={`rm-chat-bubble ${msg.role === 'model' ? 'rm-bubble-ai' : 'rm-bubble-user'}`}>
                     {msg.content}
                   </div>
                 ))}
                 {isChatTyping && (
-                  <div className="chat-bubble assistant" style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>
-                    Companion is thinking...
+                  <div className="rm-chat-bubble rm-bubble-ai rm-typing">
+                    <span></span><span></span><span></span>
                   </div>
                 )}
                 <div ref={chatBottomRef} />
               </div>
-              <form onSubmit={sendChatMessage} className="chat-input-row" aria-label="Chat message form">
-                <input 
-                  type="text" 
-                  className="chat-input" 
-                  placeholder="Share what's on your mind..." 
+
+              <form onSubmit={sendChatMessage} className="rm-chat-form" aria-label="Chat message form">
+                <input
+                  type="text"
+                  className="rm-chat-input"
+                  placeholder="Share what's on your mind..."
                   value={userInputMessage}
                   onChange={(e) => setUserInputMessage(e.target.value)}
                   disabled={isChatTyping}
                   aria-label="Type your message to the AI companion"
                 />
-                <button type="submit" className="chat-send-btn" disabled={isChatTyping} aria-label="Send message">
-                  <Send size={18} aria-hidden="true" />
+                <button type="submit" className="rm-chat-send" disabled={isChatTyping} aria-label="Send message">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
               </form>
             </div>
           </div>
         )}
       </main>
+
+      <footer className="rm-footer">
+        <div className="rm-footer-inner">
+          <span className="rm-footer-brand">ResilientMind</span>
+          <p className="rm-footer-copy">© 2024 ResilientMind. Your cognitive sanctuary.</p>
+          <div className="rm-footer-links">
+            <a href="#" onClick={(e) => e.preventDefault()}>Privacy</a>
+            <a href="#" onClick={(e) => e.preventDefault()}>Support</a>
+            <a href="#" onClick={(e) => e.preventDefault()}>About</a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

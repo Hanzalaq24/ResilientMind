@@ -1,37 +1,35 @@
 import type { JournalEntry, AIInsight } from '../lib/db';
 
 export default function StressTrendChart({ history }: { history: { entry: JournalEntry; insight: AIInsight | null }[] }) {
-  const chartHeight = 120;
+  const chartHeight = 100;
   const chartWidth = 500;
   const padding = 20;
 
-  // Last 7 entries in chronological order
-  const data = [...history]
-    .slice(0, 7)
-    .reverse();
+  const data = [...history].slice(0, 7).reverse();
 
   if (data.length < 2) {
     return (
-      <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-        Log at least 2 check-ins to visualize stress & sleep trends.
+      <div style={{
+        padding: '1rem',
+        textAlign: 'center',
+        color: 'var(--on-surface-variant)',
+        fontSize: '0.8rem',
+        background: 'var(--surface-low)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px dashed var(--outline-variant)'
+      }}>
+        Log at least 2 check-ins to see your wellness trend
       </div>
     );
   }
 
-  const getX = (index: number) => {
-    return padding + (index * (chartWidth - padding * 2)) / (data.length - 1);
-  };
-
-  const getMoodY = (score: number) => {
-    return chartHeight - padding - ((score - 1) * (chartHeight - padding * 2)) / 9;
-  };
-
+  const getX = (index: number) => padding + (index * (chartWidth - padding * 2)) / (data.length - 1);
+  const getMoodY = (score: number) => chartHeight - padding - ((score - 1) * (chartHeight - padding * 2)) / 9;
   const getSleepY = (hours: number) => {
     const clamped = Math.max(2, Math.min(12, hours));
     return chartHeight - padding - ((clamped - 2) * (chartHeight - padding * 2)) / 10;
   };
 
-  // Build paths
   let moodPath = '';
   let sleepPath = '';
 
@@ -39,7 +37,6 @@ export default function StressTrendChart({ history }: { history: { entry: Journa
     const x = getX(i);
     const yMood = getMoodY(d.entry.moodScore);
     const ySleep = getSleepY(d.entry.sleepHours);
-
     if (i === 0) {
       moodPath = `M ${x} ${yMood}`;
       sleepPath = `M ${x} ${ySleep}`;
@@ -50,33 +47,27 @@ export default function StressTrendChart({ history }: { history: { entry: Journa
   });
 
   return (
-    <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.015)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.04)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-cyan)' }}></span>
-          Mood Level (1-10)
+    <div style={{ padding: '12px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--on-surface-variant)', marginBottom: '10px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#006a63', display: 'inline-block' }}></span> Mood
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#a855f7' }}></span>
-          Sleep Hours (2-12h)
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', display: 'inline-block' }}></span> Sleep
         </span>
       </div>
-      <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
-          {/* Grid lines */}
-          <line x1={padding} y1={padding} x2={chartWidth - padding} y2={padding} stroke="rgba(255, 255, 255, 0.03)" strokeDasharray="3" />
-          <line x1={padding} y1={chartHeight / 2} x2={chartWidth - padding} y2={chartHeight / 2} stroke="rgba(255, 255, 255, 0.03)" strokeDasharray="3" />
-          <line x1={padding} y1={chartHeight - padding} x2={chartWidth - padding} y2={chartHeight - padding} stroke="rgba(255, 255, 255, 0.06)" />
+      <div style={{ width: '100%', overflow: 'hidden', background: 'var(--surface-low)', borderRadius: 'var(--radius-md)', padding: '8px 0' }}>
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} width="100%" height="100%" style={{ overflow: 'visible', display: 'block' }} aria-hidden="true">
+          <line x1={padding} y1={chartHeight / 2} x2={chartWidth - padding} y2={chartHeight / 2} stroke="var(--outline-variant)" strokeDasharray="4" />
+          <line x1={padding} y1={chartHeight - padding} x2={chartWidth - padding} y2={chartHeight - padding} stroke="var(--outline-variant)" />
 
-          {/* Paths */}
-          <path d={moodPath} fill="none" stroke="var(--accent-cyan)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 0px 4px rgba(0, 242, 254, 0.4))' }} />
-          <path d={sleepPath} fill="none" stroke="#a855f7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 0px 4px rgba(168, 85, 247, 0.4))' }} />
+          <path d={moodPath} fill="none" stroke="#006a63" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={sleepPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-          {/* Data Points */}
           {data.map((d, i) => (
             <g key={i}>
-              <circle cx={getX(i)} cy={getMoodY(d.entry.moodScore)} r="4" fill="var(--accent-cyan)" />
-              <circle cx={getX(i)} cy={getSleepY(d.entry.sleepHours)} r="4" fill="#a855f7" />
+              <circle cx={getX(i)} cy={getMoodY(d.entry.moodScore)} r="4" fill="#006a63" />
+              <circle cx={getX(i)} cy={getSleepY(d.entry.sleepHours)} r="4" fill="#7c3aed" />
             </g>
           ))}
         </svg>
