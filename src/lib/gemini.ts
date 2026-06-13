@@ -1,3 +1,5 @@
+// NVIDIA Llama-3.3-Nemotron-Super-49B API integration helper
+
 export interface AIInsightOutput {
   emotion: {
     primary: string;
@@ -41,7 +43,7 @@ ${historyContext}
 
 Your goal is to perform a deep, empathetic, and professional diagnostic analysis of the student's current stress and burnout status.
 
-Return a valid JSON object matching the following structure EXACTLY (no markdown block formatting, no backticks, just raw JSON):
+Return a valid JSON object matching the following structure EXACTLY (do not include any conversational filler, markdown formatting blocks, or backticks - return ONLY the raw JSON string):
 {
   "emotion": {
     "primary": "string (capitalized primary emotion e.g., Anxiety, Self-Doubt, Exhaustion, Hopeful, etc.)",
@@ -63,33 +65,39 @@ Return a valid JSON object matching the following structure EXACTLY (no markdown
 }`;
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        contents: [
+        model: "nvidia/llama-3.3-nemotron-super-49b-v1",
+        messages: [
           {
-            parts: [{ text: prompt }]
+            role: "user",
+            content: prompt
           }
         ],
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
+        temperature: 0.6,
+        top_p: 0.95,
+        max_tokens: 4096,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+        stream: false
       })
     });
 
     if (!res.ok) {
-      throw new Error(`Gemini API returned status ${res.status}`);
+      throw new Error(`NVIDIA API returned status ${res.status}`);
     }
 
     const data = await res.json();
-    const rawResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const rawResponse = data.choices?.[0]?.message?.content || '';
     const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanJson);
   } catch (error) {
-    console.error("Error analyzing journal with Gemini:", error);
+    console.error("Error analyzing journal with NVIDIA API:", error);
     // Offline/Fallback generator for robust offline demonstration
     const mockPrimary = moodScore <= 4 ? "Anxiety" : moodScore <= 7 ? "Fatigue" : "Contentment";
     const mockSecondary = sleepHours < 6 ? "Sleep Deprivation" : "Self-Doubt";
@@ -153,34 +161,42 @@ Guidelines:
 
   const contents = [
     {
-      role: 'user',
-      parts: [{ text: systemPrompt }]
+      role: 'system',
+      content: systemPrompt
     },
     ...messages.map(m => ({
-      role: m.role,
-      parts: [{ text: m.content }]
+      role: m.role === 'model' ? 'assistant' : 'user',
+      content: m.content
     }))
   ];
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        contents
+        model: "nvidia/llama-3.3-nemotron-super-49b-v1",
+        messages: contents,
+        temperature: 0.6,
+        top_p: 0.95,
+        max_tokens: 4096,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+        stream: false
       })
     });
 
     if (!res.ok) {
-      throw new Error(`Gemini Chat API returned status ${res.status}`);
+      throw new Error(`NVIDIA Chat API returned status ${res.status}`);
     }
 
     const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here for you. Tell me what's on your mind.";
+    return data.choices?.[0]?.message?.content || "I'm here for you. Tell me what's on your mind.";
   } catch (error) {
-    console.error("Error in companion chat:", error);
+    console.error("Error in NVIDIA companion chat:", error);
     return "I'm right here with you. Take a deep breath. Even if the system is momentarily offline, I want you to remember that your mental health is always more important than any test score. What specifically is bothering you the most right now?";
   }
 }
