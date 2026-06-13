@@ -47,8 +47,8 @@ export default function StressTrendChart({ history }: { history: { entry: Journa
   });
 
   return (
-    <div style={{ padding: '12px 0' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--on-surface-variant)', marginBottom: '10px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+    <div style={{ padding: '12px 0' }} role="img" aria-label={`Mood and sleep trend chart showing ${data.length} data points. Mood trend: ${data.map(d => d.entry.moodScore).join(', ')}. Sleep trend: ${data.map(d => d.entry.sleepHours).join(', ')}.`}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--on-surface-variant)', marginBottom: '10px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }} aria-hidden="true">
         <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#006a63', display: 'inline-block' }}></span> Mood
         </span>

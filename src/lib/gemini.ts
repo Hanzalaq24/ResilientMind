@@ -15,6 +15,11 @@ export interface AIInsightOutput {
   futureMessage: string;
 }
 
+export interface AnalyzeResult {
+  insight: AIInsightOutput;
+  isFallback: boolean;
+}
+
 export async function analyzeJournal(
   apiKey: string,
   moodScore: number,
@@ -24,7 +29,7 @@ export async function analyzeJournal(
   userName: string,
   examType: string,
   recentHistory?: { moodScore: number; sleepHours: number; studyHours: number; journalText: string }[]
-): Promise<AIInsightOutput> {
+): Promise<AnalyzeResult> {
   const historyContext = recentHistory && recentHistory.length > 0
     ? `\nRecent Journal History:\n${recentHistory.map((h, i) => `Entry ${i+1}: Mood: ${h.moodScore}/10, Sleep: ${h.sleepHours}h, Study: ${h.studyHours}h. Text: "${h.journalText}"`).join('\n')}`
     : '';
@@ -89,7 +94,7 @@ Return a valid JSON object matching the following structure EXACTLY (no markdown
     const data = await res.json();
     const rawResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanJson);
+    return { insight: JSON.parse(cleanJson), isFallback: false };
   } catch (error) {
     console.error("Error analyzing journal with Gemini:", error);
     // Offline/Fallback generator for robust offline demonstration
@@ -98,28 +103,31 @@ Return a valid JSON object matching the following structure EXACTLY (no markdown
     const riskLevel = (moodScore <= 3 || sleepHours < 5 || studyHours >= 11) ? "High" : (moodScore <= 6 || sleepHours < 6) ? "Medium" : "Low";
     
     return {
-      emotion: {
-        primary: mockPrimary,
-        secondary: mockSecondary,
-        summary: `Feeling ${mockPrimary.toLowerCase()} and experiencing some ${mockSecondary.toLowerCase()} after studying for ${studyHours} hours and getting ${sleepHours} hours of sleep.`
+      insight: {
+        emotion: {
+          primary: mockPrimary,
+          secondary: mockSecondary,
+          summary: `Feeling ${mockPrimary.toLowerCase()} and experiencing some ${mockSecondary.toLowerCase()} after studying for ${studyHours} hours and getting ${sleepHours} hours of sleep.`
+        },
+        stressTrigger: [
+          studyHours > 10 ? "Study sessions exceeding 10 hours" : "Mock exams or syllabus coverage pressure",
+          sleepHours < 6 ? "Inadequate sleep (< 6 hours)" : "Intense exam focus"
+        ].filter(Boolean),
+        burnoutRisk: {
+          level: riskLevel,
+          reason: riskLevel === "High" 
+            ? "High study hours combined with severe sleep deprivation and negative emotional self-talk." 
+            : "Accumulated daily stress with moderate rest levels."
+        },
+        recoveryPlan: [
+          "Unplug from all study materials at least 1 hour before bed.",
+          "Practice 4-7-8 deep breathing for 3 minutes right now.",
+          "Take a 15-minute screen-free walk outdoors.",
+          "Remind yourself that mock tests are diagnostic tools, not final scores."
+        ],
+        futureMessage: `Dear Present ${userName || 'Me'},\n\nI know today's mock test felt like the end of the world, and you are doubting whether you will crack the ${examType || 'exam'}. But trust me, this one day, this one score, does not define our future. Every hour of effort you put in, even when you feel like quitting, is building our path. Go get some sleep. We made it through, and we did it because you chose to keep going today. Thank you.`
       },
-      stressTrigger: [
-        studyHours > 10 ? "Study sessions exceeding 10 hours" : "Mock exams or syllabus coverage pressure",
-        sleepHours < 6 ? "Inadequate sleep (< 6 hours)" : "Intense exam focus"
-      ].filter(Boolean),
-      burnoutRisk: {
-        level: riskLevel,
-        reason: riskLevel === "High" 
-          ? "High study hours combined with severe sleep deprivation and negative emotional self-talk." 
-          : "Accumulated daily stress with moderate rest levels."
-      },
-      recoveryPlan: [
-        "Unplug from all study materials at least 1 hour before bed.",
-        "Practice 4-7-8 deep breathing for 3 minutes right now.",
-        "Take a 15-minute screen-free walk outdoors.",
-        "Remind yourself that mock tests are diagnostic tools, not final scores."
-      ],
-      futureMessage: `Dear Present ${userName || 'Me'},\n\nI know today's mock test felt like the end of the world, and you are doubting whether you will crack the ${examType || 'exam'}. But trust me, this one day, this one score, does not define our future. Every hour of effort you put in, even when you feel like quitting, is building our path. Go get some sleep. We made it through, and we did it because you chose to keep going today. Thank you.`
+      isFallback: true
     };
   }
 }
@@ -129,13 +137,18 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatResponse {
+  content: string;
+  isFallback: boolean;
+}
+
 export async function getCompanionChatResponse(
   apiKey: string,
   messages: ChatMessage[],
   studentName: string,
   examType: string,
   latestInsight?: AIInsightOutput | null
-): Promise<string> {
+): Promise<ChatResponse> {
   const systemPrompt = `You are the AI Exam Wellness Companion. You are a warm, wise, empathetic, and context-aware virtual counselor for students preparing for high-stakes exams (like JEE, NEET, UPSC, etc.).
 Student Name: ${studentName}
 Preparing for: ${examType}
@@ -180,9 +193,15 @@ Guidelines:
     }
 
     const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here for you. Tell me what's on your mind.";
+    return {
+      content: data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here for you. Tell me what's on your mind.",
+      isFallback: false
+    };
   } catch (error) {
     console.error("Error in companion chat:", error);
-    return "I'm right here with you. Take a deep breath. Even if the system is momentarily offline, I want you to remember that your mental health is always more important than any test score. What specifically is bothering you the most right now?";
+    return {
+      content: "I'm right here with you. Take a deep breath. Even if the system is momentarily offline, I want you to remember that your mental health is always more important than any test score. What specifically is bothering you the most right now?",
+      isFallback: true
+    };
   }
 }

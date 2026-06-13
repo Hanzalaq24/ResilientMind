@@ -174,6 +174,31 @@ body {
   border-color: var(--outline);
 }
 
+/* ── Gemini Connection Warning Banner ── */
+.rm-banner-warning {
+  margin-top: 72px;
+  padding: 10px var(--space-md);
+  background: #fff3cd;
+  border-bottom: 2px solid #ffc107;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #856404;
+  line-height: 1.5;
+}
+.rm-banner-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.rm-banner-warning code {
+  background: rgba(0,0,0,0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
 /* ── Main ── */
 .rm-main {
   flex: 1;
@@ -1152,4 +1177,113 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 3px; }
+
+/* ── Accessibility: Skip Link ── */
+.rm-skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  background: var(--primary);
+  color: var(--on-primary);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  z-index: 200;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.2s;
+}
+.rm-skip-link:focus {
+  top: 8px;
+}
+
+/* ── Accessibility: Screen Reader Only ── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Stress Trigger Report ── */
+.rm-trigger-report {
+  font-family: 'Inter', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--on-surface);
+  background: var(--surface-low);
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* ── Adaptive Mindfulness ── */
+.rm-mindfulness-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rm-mindfulness-item {
+  background: var(--surface-low);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  border-left: 3px solid var(--secondary);
+}
+.rm-mindfulness-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.rm-mindfulness-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--on-surface);
+}
+.rm-mindfulness-duration {
+  font-size: 0.7rem;
+  color: var(--on-surface-variant);
+  background: var(--surface-container);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+.rm-mindfulness-desc {
+  font-size: 0.78rem;
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+  margin: 0 0 6px 0;
+}
+.rm-mindfulness-category {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+.rm-cat-breathing { background: #dbeafe; color: #1e40af; }
+.rm-cat-grounding { background: #d1fae5; color: #065f46; }
+.rm-cat-movement { background: #fef3c7; color: #92400e; }
+.rm-cat-cognitive { background: #ede9fe; color: #5b21b6; }
+
+/* ── Focus Styles for Accessibility ── */
+:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
 ::-webkit-scrollbar-thumb:hover { background: var(--outline); }
