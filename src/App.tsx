@@ -13,17 +13,106 @@ import {
   Send, 
   ArrowLeft,
   Calendar,
-  Heart
+  Heart,
+  Settings,
+  X
 } from 'lucide-react';
 import { db } from './lib/db';
 import type { User as UserType, JournalEntry, AIInsight } from './lib/db';
 import { analyzeJournal, getCompanionChatResponse } from './lib/gemini';
 import type { ChatMessage, AIInsightOutput } from './lib/gemini';
 
+// Visual SVG Trend Chart Component
+function StressTrendChart({ history }: { history: { entry: JournalEntry; insight: AIInsight | null }[] }) {
+  const chartHeight = 120;
+  const chartWidth = 500;
+  const padding = 20;
+
+  // Last 7 entries in chronological order
+  const data = [...history]
+    .slice(0, 7)
+    .reverse();
+
+  if (data.length < 2) {
+    return (
+      <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+        Log at least 2 check-ins to visualize stress & sleep trends.
+      </div>
+    );
+  }
+
+  const getX = (index: number) => {
+    return padding + (index * (chartWidth - padding * 2)) / (data.length - 1);
+  };
+
+  const getMoodY = (score: number) => {
+    return chartHeight - padding - ((score - 1) * (chartHeight - padding * 2)) / 9;
+  };
+
+  const getSleepY = (hours: number) => {
+    const clamped = Math.max(2, Math.min(12, hours));
+    return chartHeight - padding - ((clamped - 2) * (chartHeight - padding * 2)) / 10;
+  };
+
+  // Build paths
+  let moodPath = '';
+  let sleepPath = '';
+
+  data.forEach((d, i) => {
+    const x = getX(i);
+    const yMood = getMoodY(d.entry.moodScore);
+    const ySleep = getSleepY(d.entry.sleepHours);
+
+    if (i === 0) {
+      moodPath = `M ${x} ${yMood}`;
+      sleepPath = `M ${x} ${ySleep}`;
+    } else {
+      moodPath += ` L ${x} ${yMood}`;
+      sleepPath += ` L ${x} ${ySleep}`;
+    }
+  });
+
+  return (
+    <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.015)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.04)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-cyan)' }}></span>
+          Mood Level (1-10)
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#a855f7' }}></span>
+          Sleep Hours (2-12h)
+        </span>
+      </div>
+      <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
+          {/* Grid lines */}
+          <line x1={padding} y1={padding} x2={chartWidth - padding} y2={padding} stroke="rgba(255, 255, 255, 0.03)" strokeDasharray="3" />
+          <line x1={padding} y1={chartHeight / 2} x2={chartWidth - padding} y2={chartHeight / 2} stroke="rgba(255, 255, 255, 0.03)" strokeDasharray="3" />
+          <line x1={padding} y1={chartHeight - padding} x2={chartWidth - padding} y2={chartHeight - padding} stroke="rgba(255, 255, 255, 0.06)" />
+
+          {/* Paths */}
+          <path d={moodPath} fill="none" stroke="var(--accent-cyan)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 0px 4px rgba(0, 242, 254, 0.4))' }} />
+          <path d={sleepPath} fill="none" stroke="#a855f7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 0px 4px rgba(168, 85, 247, 0.4))' }} />
+
+          {/* Data Points */}
+          {data.map((d, i) => (
+            <g key={i}>
+              <circle cx={getX(i)} cy={getMoodY(d.entry.moodScore)} r="4" fill="var(--accent-cyan)" />
+              <circle cx={getX(i)} cy={getSleepY(d.entry.sleepHours)} r="4" fill="#a855f7" />
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [nameInput, setNameInput] = useState('');
   const [examTypeInput, setExamTypeInput] = useState('JEE');
+  const [apiKeyInput, setApiKeyInput] = useState('');
   
   // Daily check-in form state
   const [mood, setMood] = useState(5);
@@ -43,11 +132,20 @@ export default function App() {
   const [userInputMessage, setUserInputMessage] = useState('');
   const [isChatTyping, setIsChatTyping] = useState(false);
   
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsKeyInput, setSettingsKeyInput] = useState('');
+
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // Load current user and history on mount
+  // Load current user, key, and history on mount
   useEffect(() => {
     const user = db.getCurrentUser();
+    const savedKey = db.getApiKey();
+    if (savedKey) {
+      setApiKeyInput(savedKey);
+      setSettingsKeyInput(savedKey);
+    }
     if (user) {
       setCurrentUser(user);
       loadHistory(user.id);
@@ -73,6 +171,11 @@ export default function App() {
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nameInput.trim()) return;
+    if (!apiKeyInput.trim()) {
+      alert('Please enter a Gemini API Key to enable AI features.');
+      return;
+    }
+    db.saveApiKey(apiKeyInput.trim());
     const user = db.createUser(nameInput.trim(), examTypeInput);
     setCurrentUser(user);
     loadHistory(user.id);
@@ -89,6 +192,12 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (!currentUser) return;
+    const key = db.getApiKey();
+    if (!key) {
+      alert("Please configure a Gemini API Key in Settings first.");
+      setShowSettings(true);
+      return;
+    }
     if (!journalText.trim()) {
       alert("Please write a journal entry to analyze your stress levels.");
       return;
@@ -115,9 +224,10 @@ export default function App() {
         journalText: h.entry.journalText
       }));
 
-      // 3. Call AI Analysis API
+      // 3. Call AI Analysis API passing key
       setLoadingText("Detecting hidden stress triggers and predicting burnout risk...");
       const aiResult: AIInsightOutput = await analyzeJournal(
+        key,
         mood,
         sleep,
         study,
@@ -145,7 +255,7 @@ export default function App() {
     } catch (err) {
       console.error(err);
       setView('form');
-      alert("Failed to analyze stress patterns. Please try again.");
+      alert("Failed to analyze stress patterns. Please check your API key in Settings and try again.");
     }
   };
 
@@ -155,6 +265,15 @@ export default function App() {
     setSleepHours(4);
     setStudyHours(11);
     setJournalText("My mock test went terribly. I don't think I can crack JEE.");
+    
+    // Auto-fill a demo API key if they don't have one configured
+    const existingKey = db.getApiKey();
+    if (!existingKey) {
+      const demoKey = "AQ.Ab8RN6I4nODBu4AJQL-5rw9PYklEq7_vYgFAjgRvuvybvvi0Kw";
+      setApiKeyInput(demoKey);
+      setSettingsKeyInput(demoKey);
+      db.saveApiKey(demoKey);
+    }
   };
 
   const selectHistoryItem = (item: { entry: JournalEntry; insight: AIInsight | null }) => {
@@ -193,7 +312,9 @@ export default function App() {
     setIsChatTyping(true);
 
     try {
+      const key = db.getApiKey();
       const response = await getCompanionChatResponse(
+        key,
         updatedMessages,
         currentUser.name,
         currentUser.examType,
@@ -205,6 +326,12 @@ export default function App() {
     } finally {
       setIsChatTyping(false);
     }
+  };
+
+  const saveSettings = () => {
+    db.saveApiKey(settingsKeyInput.trim());
+    setApiKeyInput(settingsKeyInput.trim());
+    setShowSettings(false);
   };
 
   // Welcome onboarding screen
@@ -256,10 +383,34 @@ export default function App() {
                     <option value="Board Exams">10th / 12th Board Exams</option>
                   </select>
                 </div>
+                <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                  <label className="form-label" htmlFor="api-key-setup">Gemini API Key</label>
+                  <input 
+                    type="password" 
+                    id="api-key-setup"
+                    className="form-input" 
+                    placeholder="Enter Gemini API key" 
+                    value={apiKeyInput} 
+                    onChange={(e) => setApiKeyInput(e.target.value)} 
+                    required 
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    Stored strictly locally in your browser's LocalStorage. Never uploaded to a server.
+                  </span>
+                </div>
                 <button type="submit" className="action-btn">
                   <Sparkles size={18} /> Get Started
                 </button>
               </form>
+              <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                <button 
+                  className="logout-btn" 
+                  onClick={fillDemoScenario}
+                  style={{ width: '100%', borderColor: 'rgba(0, 242, 254, 0.2)', color: 'var(--accent-cyan)' }}
+                >
+                  ⚡ Auto-Fill Demo Profile & Key
+                </button>
+              </div>
             </div>
           </div>
         </main>
@@ -300,11 +451,58 @@ export default function App() {
             <User size={14} style={{ marginRight: '4px', verticalAlign: 'middle', color: 'var(--accent-cyan)' }} />
             <span>{currentUser.name} ({currentUser.examType})</span>
           </div>
+          <button className="logout-btn" onClick={() => setShowSettings(true)} style={{ marginRight: '0.5rem' }}>
+            <Settings size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Settings
+          </button>
           <button className="logout-btn" onClick={handleLogout}>
             <LogOut size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Sign Out
           </button>
         </div>
       </header>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2rem', position: 'relative' }}>
+            <button 
+              onClick={() => setShowSettings(false)}
+              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}
+            >
+              <X size={20} />
+            </button>
+            <h3 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Settings size={20} style={{ color: 'var(--accent-cyan)' }} /> Settings
+            </h3>
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label" htmlFor="api-key-settings">Gemini API Key</label>
+              <input 
+                type="password" 
+                id="api-key-settings"
+                className="form-input" 
+                placeholder="Enter Gemini API key" 
+                value={settingsKeyInput} 
+                onChange={(e) => setSettingsKeyInput(e.target.value)} 
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                Stored locally in your browser.
+              </span>
+            </div>
+            <button className="action-btn" onClick={saveSettings}>Save Changes</button>
+          </div>
+        </div>
+      )}
 
       <main>
         {view === 'form' && (
@@ -410,13 +608,17 @@ export default function App() {
               </button>
             </div>
 
-            {/* Sidebar history */}
+            {/* Sidebar history & SVG Chart */}
             <div className="glass-panel history-sidebar">
               <div className="sidebar-title">
                 <Calendar size={18} />
-                <span>Recent Wellness Logs</span>
+                <span>Wellness Dashboard</span>
               </div>
-              <div className="history-list">
+              
+              {/* Render Trend Chart */}
+              <StressTrendChart history={historyEntries} />
+
+              <div className="history-list" style={{ marginTop: '1.5rem' }}>
                 {historyEntries.length === 0 ? (
                   <div className="empty-history">
                     <Smile size={24} />
@@ -438,15 +640,16 @@ export default function App() {
                       </div>
                       <div className="history-item-metrics">
                         <div className="metric-badge">
-                          <Moon size={10} /> {item.entry.sleepHours}h sleep
+                          <Moon size={10} style={{ marginRight: '2px' }} /> {item.entry.sleepHours}h sleep
                         </div>
                         <div className="metric-badge">
-                          <BookOpen size={10} /> {item.entry.studyHours}h study
+                          <BookOpen size={10} style={{ marginRight: '2px' }} /> {item.entry.studyHours}h study
                         </div>
                         {item.insight && (
                           <span style={{ 
                             marginLeft: 'auto', 
                             fontSize: '0.7rem', 
+                            fontWeight: '600',
                             color: item.insight.burnoutRisk.level === 'High' ? 'var(--color-high)' : item.insight.burnoutRisk.level === 'Medium' ? 'var(--color-medium)' : 'var(--color-low)'
                           }}>
                             Risk: {item.insight.burnoutRisk.level}

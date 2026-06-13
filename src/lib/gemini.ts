@@ -1,7 +1,3 @@
-// Gemini API integration helper
-
-const GEMINI_API_KEY = "AQ.Ab8RN6I4nODBu4AJQL-5rw9PYklEq7_vYgFAjgRvuvybvvi0Kw";
-
 export interface AIInsightOutput {
   emotion: {
     primary: string;
@@ -18,6 +14,7 @@ export interface AIInsightOutput {
 }
 
 export async function analyzeJournal(
+  apiKey: string,
   moodScore: number,
   sleepHours: number,
   studyHours: number,
@@ -66,7 +63,7 @@ Return a valid JSON object matching the following structure EXACTLY (no markdown
 }`;
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -131,6 +128,7 @@ export interface ChatMessage {
 }
 
 export async function getCompanionChatResponse(
+  apiKey: string,
   messages: ChatMessage[],
   studentName: string,
   examType: string,
@@ -165,7 +163,7 @@ Guidelines:
   ];
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

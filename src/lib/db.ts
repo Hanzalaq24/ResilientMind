@@ -39,8 +39,9 @@ export interface AIInsight {
 const STORAGE_KEYS = {
   USERS: 'ewc_users',
   JOURNAL_ENTRIES: 'ewc_journal_entries',
-  AI_INSIGHTS: 'ewc_ai_insights',
+  AI_INSIGHTS: 'ewc_api_insights',
   CURRENT_USER_ID: 'ewc_current_user_id',
+  API_KEY: 'ewc_api_key',
 };
 
 // Helper functions for LocalStorage
@@ -161,6 +162,15 @@ export const db = {
       localStorage.removeItem(STORAGE_KEYS.JOURNAL_ENTRIES);
       localStorage.removeItem(STORAGE_KEYS.AI_INSIGHTS);
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+      localStorage.removeItem(STORAGE_KEYS.API_KEY);
     }
+  },
+
+  getApiKey: (): string => {
+    return getFromStorage<string>(STORAGE_KEYS.API_KEY, '');
+  },
+
+  saveApiKey: (key: string): void => {
+    setToStorage(STORAGE_KEYS.API_KEY, key);
   }
 };
