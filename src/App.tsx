@@ -112,7 +112,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [nameInput, setNameInput] = useState('');
   const [examTypeInput, setExamTypeInput] = useState('JEE');
-  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeyInput, setApiKeyInput] = useState(import.meta.env.VITE_GEMINI_API_KEY || '');
   
   // Daily check-in form state
   const [mood, setMood] = useState(5);
@@ -134,7 +134,7 @@ export default function App() {
   
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsKeyInput, setSettingsKeyInput] = useState('');
+  const [settingsKeyInput, setSettingsKeyInput] = useState(import.meta.env.VITE_GEMINI_API_KEY || '');
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -142,9 +142,14 @@ export default function App() {
   useEffect(() => {
     const user = db.getCurrentUser();
     const savedKey = db.getApiKey();
+    const envKey = import.meta.env.VITE_GEMINI_API_KEY || '';
     if (savedKey) {
       setApiKeyInput(savedKey);
       setSettingsKeyInput(savedKey);
+    } else if (envKey) {
+      setApiKeyInput(envKey);
+      setSettingsKeyInput(envKey);
+      db.saveApiKey(envKey);
     }
     if (user) {
       setCurrentUser(user);
@@ -268,11 +273,11 @@ export default function App() {
     
     // Auto-fill a demo API key if they don't have one configured
     const existingKey = db.getApiKey();
-    if (!existingKey) {
-      const demoKey = "AQ.Ab8RN6I4nODBu4AJQL-5rw9PYklEq7_vYgFAjgRvuvybvvi0Kw";
-      setApiKeyInput(demoKey);
-      setSettingsKeyInput(demoKey);
-      db.saveApiKey(demoKey);
+    const envKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+    if (!existingKey && envKey) {
+      setApiKeyInput(envKey);
+      setSettingsKeyInput(envKey);
+      db.saveApiKey(envKey);
     }
   };
 
